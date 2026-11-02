@@ -1,0 +1,6 @@
+drwxr-x--- 4 despliegue operaciones 4096 Nov  1 20:44 /srv/dpl/web
+total 16
+drwxr-xr-x 2 despliegue operaciones 4096 Nov  1 20:31 assets
+drwxr-xr-x 3 despliegue despliegue  4096 Nov  1 20:35 dist
+-rw-r----- 1 despliegue operaciones  735 Nov  1 20:31 index.html
+-rw-r--r-- 1 despliegue despliegue    24 Nov  2 13:27 prueba.txt
