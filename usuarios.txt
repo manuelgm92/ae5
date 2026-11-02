@@ -1,0 +1,4 @@
+despliegue:x:1004:1007::/home/despliegue:/bin/bash
+lector:x:1005:1005::/home/lector:/bin/bash
+despliegue : despliegue operaciones
+lector : lector operaciones
