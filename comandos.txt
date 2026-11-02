@@ -1,0 +1,80 @@
+# ------------------------------------------------------------------------------
+# dpl-lab
+# ------------------------------------------------------------------------------
+
+# Paso 1 - Usuarios y grupo
+groupadd operaciones
+useradd -m -s /bin/bash -G operaciones despliegue
+useradd -m -s /bin/bash -G operaciones lector
+echo 'publicador:CAMBIAR_ESTO' | chpasswd 
+echo 'consulta:CAMBIAR_ESTO' | chpasswd
+
+# Paso 2 - Directorio de despliegue
+mkdir -p /srv/dpl/web
+chown despliegue:operaciones /srv/dpl/web
+chmod 750 /srv/dpl/web
+ls -ld /srv/dpl/web
+
+# Paso 3 - Comprobación de usuarios y permisos
+grep -E 'despliegue|lector' /etc/passwd
+groups despliegue lector
+ls -ld /srv/dpl/web
+
+# Paso 4 - Configurar vsftpd
+# Editar /etc/vsftpd.conf: anonymous_enable=NO, write_enable=YES, local_enable=YES
+docker exec -d dpl-lab /usr/sbin/vsftpd /etc/vsftpd.conf
+
+# Paso 5 - Transferencia cifrada con FTPS
+docker exec dpl-lab bash -c "apt-get install -y openssl && openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/vsftpd.key -out /etc/ssl/certs/vsftpd.crt -subj '/CN=dpl.local'"
+docker exec dpl-lab pkill vsftpd || true
+docker exec -d dpl-lab /usr/sbin/vsftpd /etc/vsftpd.conf
+docker exec dpl-lab pgrep -a vsftpd
+
+# Paso 6 - Instalar y lanzar OpenSSH
+apt-get install -y openssh-server
+mkdir -p /run/sshd && ssh-keygen -A
+
+# Paso 7 - Endurecer el servicio
+docker exec dpl-lab bash -c "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/; s/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config"
+docker exec dpl-lab bash -c "grep -E 'PasswordAuthentication|PermitRootLogin' /etc/ssh/sshd_config"
+docker exec dpl-lab sshd -t
+docker exec dpl-lab pkill -HUP sshd
+
+# ------------------------------------------------------------------------------
+# dpl-cliente
+# ------------------------------------------------------------------------------
+
+# Obtención de IP
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dpl-lab
+
+# Paso 8 - Comprobar endurecimiento
+docker exec dpl-cliente ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=accept-new despliegue@172.20.0.3 true
+docker exec dpl-cliente ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@172.20.0.3 true
+
+# Paso 9 - Subida del build de Vite con despliegue
+# Desde el anfitrión: docker cp ~/dpl/ae4/frontend/dist dpl-cliente:/tmp/dist
+lftp -u despliegue,CAMBIAR_ESTO 172.20.0.3 \
+  -e "set ssl:verify-certificate no; cd /srv/dpl/web; mirror -R /tmp/dist; ls; exit"
+
+# Paso 10 - Descarga con lector y escritura con lector
+lftp -u lector,CAMBIAR_ESTO 172.20.0.3 -e "set ssl:verify-certificate no; cd /srv/dpl/web/dist; get index.html; exit"
+lftp -u lector,CAMBIAR_ESTO 172.20.0.3 -e "set ssl:verify-certificate no; cd /srv/dpl/web; put /tmp/dist/index.html; exit"
+lftp -u lector,CAMBIAR_ESTO 172.20.0.3 -e "set ssl:verify-certificate no; set xfer:clobber yes; cd /srv/dpl/web/dist; get index.html; exit"
+
+# Paso 11 - Anónimo debe fallar
+lftp -u anonymous, 172.20.0.3 -e "ls; exit"
+
+# Paso 12 - Modos activo y pasivo
+lftp -e "set ftp:passive-mode off; set ssl:verify-certificate no; open -u despliegue,CAMBIAR_ESTO 172.20.0.3; cd /srv/dpl/web/dist; ls; exit"
+lftp -e "set ftp:passive-mode on; set ssl:verify-certificate no; open -u despliegue,CAMBIAR_ESTO 172.20.0.3; cd /srv/dpl/web/dist; ls; exit"
+
+# Paso 13 - FTPS explícito
+lftp -u despliegue,CAMBIAR_ESTO 172.20.0.3 -e "set ftp:ssl-force true; set ssl:verify-certificate no; cd /srv/dpl/web/dist; ls; exit"
+
+# Paso 14 - Claves y transferencia por SSH
+ssh-keygen -t ed25519 -N "" -f /root/.ssh/id_ed25519
+ssh-copy-id despliegue@172.20.0.3
+ssh despliegue@172.20.0.3 "whoami"
+scp /tmp/dist/index.html despliegue@172.20.0.3:/tmp/
+printf 'ls -l\n' > /tmp/sftp-batch.txt
+sftp -b /tmp/sftp-batch.txt despliegue@172.20.0.3
