@@ -25,10 +25,18 @@
   - [4. Permisos](#4-permisos)
   - [5. Transferencia cifrada](#5-transferencia-cifrada)
   - [6. Comprobación rápida con curl](#6-comprobación-rápida-con-curl)
-- [comprobaciones.txt](#comprobacionestxt)
+- [Evidencias](#evidencias)
+  - [comprobaciones.txt](#comprobacionestxt)
+  - [usuarios.txt](#usuariostxt)
+  - [permisos.txt](#permisostxt)
+  - [comandos.txt](#comandostxt)
+  - [vsftpd.conf](#vsftpdconf)
+  - [Diagrama Mermaid de la arquitectura](#diagrama-mermaid-de-la-arquitectura)
+
 
 En este proyecto, se trabaja en dos contenedores, `dpl-lab` (servidor) y `dpl-cliente` (cliente) en la red `dpl-net`.
 
+---
 
 # dpl-lab
 
@@ -135,7 +143,9 @@ docker exec dpl-lab sshd -t
 docker exec dpl-lab pkill -HUP sshd
 ```
 
-## dpl-cliente
+---
+
+# dpl-cliente
 
 Dentro del contenedor `dpl-cliente`:
 
@@ -237,6 +247,8 @@ scp /tmp/dist/index.html despliegue@IP_DPL_LAB:/tmp/
 printf 'ls -l\n' > /tmp/sftp-batch.txt
 sftp -b /tmp/sftp-batch.txt despliegue@IP_DPL_LAB
 ```
+
+---
 
 # Verificables
 
@@ -433,7 +445,11 @@ Salida:
 -rw-r--r--    1 1004     1007           24 Nov 02 13:13 prueba.txt
 ```
 
-# comprobaciones.txt
+---
+
+# Evidencias
+
+## comprobaciones.txt
 
 Se ejecutan los siguientes comandos y se copia la salida en `comprobaciones.txt`:
 
@@ -520,4 +536,112 @@ sftp> ls -l
 despliegue@IP_DPL_LAB: Permission denied (publickey).
 < 220 (vsFTPd 3.0.5)
 -rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
+```
+
+## usuarios.txt
+
+`usuarios.txt` con `grep -E 'despliegue|lector' /etc/passwd` y groups `despliegue` `lector`.
+
+Comando:
+
+```bash
+docker exec dpl-lab grep -E 'despliegue|lector' /etc/passwd > usuarios.txt
+docker exec dpl-lab groups despliegue lector >> usuarios.txt
+```
+
+`cat usuarios.txt`:
+
+```bash
+despliegue:x:1004:1007::/home/despliegue:/bin/bash
+lector:x:1005:1005::/home/lector:/bin/bash
+despliegue : despliegue operaciones
+lector : lector operaciones
+```
+
+## permisos.txt
+
+`permisos.txt` con `ls -ld /srv/dpl/web` y `ls -l /srv/dpl/web`
+
+Comandos:
+```bash
+docker exec dpl-lab ls -ld /srv/dpl/web > permisos.txt
+docker exec dpl-lab ls -l /srv/dpl/web >> permisos.txt
+```
+
+`cat permisos.txt`:
+```bash
+drwxr-x--- 4 despliegue operaciones 4096 Nov  1 20:44 /srv/dpl/web
+total 16
+drwxr-xr-x 2 despliegue operaciones 4096 Nov  1 20:31 assets
+drwxr-xr-x 3 despliegue despliegue  4096 Nov  1 20:35 dist
+-rw-r----- 1 despliegue operaciones  735 Nov  1 20:31 index.html
+-rw-r--r-- 1 despliegue despliegue    24 Nov  2 13:27 prueba.txt
+```
+
+## comandos.txt 
+
+Con los comandos ejecutados en orden (instalación, configuración, usuarios, transferencias, FTPS y SSH). Es decir, los pasos descritos en este README, del paso 1 al 14 en `comandos.txt`
+
+## vsftpd.conf 
+
+Con la configuración final (incluidas las directivas SSL, si se aplican) y el fragmento relevante de `/etc/ssh/sshd_config`.
+
+Comando para extraer la configuración limpia de `vsftpd`:
+
+```bash
+docker exec dpl-lab bash -c "grep -v '^#' /etc/vsftpd.conf | grep -v '^$'" > vsftpd.conf
+docker exec dpl-lab grep -E '^PasswordAuthentication|^PermitRootLogin' /etc/ssh/sshd_config >> vsftpd.conf
+```
+
+Salida:
+```bash
+listen=YES
+listen_ipv6=NO
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+pasv_enable=YES
+pasv_min_port=10240
+pasv_max_port=10400
+ssl_enable=YES
+allow_anon_ssl=NO
+force_local_data_ssl=YES
+force_local_logins_ssl=YES
+require_ssl_reuse=NO
+rsa_cert_file=/etc/ssl/certs/vsftpd.crt
+rsa_private_key_file=/etc/ssl/private/vsftpd.key
+PermitRootLogin no
+PasswordAuthentication no
+PermitRootLogin no
+PasswordAuthentication no
+```
+
+
+## Diagrama Mermaid de la arquitectura 
+(cliente, FTP, SFTP/SSH) en el README, con las decisiones de seguridad explicadas.
+
+```mermaid
+flowchart TD
+    subgraph Red_Docker [Red Docker: dpl-net 172.20.0.0/16]
+        direction LR
+        
+        subgraph Cliente [dpl-cliente - 172.20.0.2]
+            LFTP[Cliente lftp / curl]
+            SSH_Client[Cliente SSH / SFTP / SCP]
+        end
+
+        subgraph Servidor [dpl-lab - 172.20.0.3]
+            direction TB
+            VSFTPD[Servicio vsftpd 3.0.5<br>Puerto 21 + TLS]
+            SSHD[Servicio OpenSSH 9.6<br>Puerto 22]
+            FS[/srv/dpl/web<br>Permisos 750 / despliegue:operaciones\]
+            
+            VSFTPD -->|Escritura / Lectura| FS
+            SSHD -->|Escritura / Lectura SFTP| FS
+        end
+
+        LFTP -->|FTPS Explícito / TLS<br>Puerto 21| VSFTPD
+        SSH_Client -->|SFTP / SCP con Clave Pública<br>Puerto 22| SSHD
+    end
 ```
