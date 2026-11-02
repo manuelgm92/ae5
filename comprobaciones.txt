@@ -1,0 +1,43 @@
+86 /usr/sbin/vsftpd /etc/vsftpd.conf
+LISTEN 0      32           0.0.0.0:21         0.0.0.0:*    users:(("vsftpd",pid=86,fd=3))
+46 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+ii  vsftpd         3.0.5-0ubuntu3.1 arm64        lightweight, efficient FTP server written for security
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+#anon_mkdir_write_enable=YES
+#ssl_enable=NO
+ssl_enable=YES
+PermitRootLogin no
+PasswordAuthentication no
+PermitRootLogin no
+PasswordAuthentication no
+despliegue:x:1004:1007::/home/despliegue:/bin/bash
+lector:x:1005:1005::/home/lector:/bin/bash
+despliegue : despliegue operaciones
+lector : lector operaciones
+drwxr-x--- 4 despliegue operaciones 4096 Nov  1 20:44 /srv/dpl/web
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
+get: /prueba.txt: file already exists and xfer:clobber is unset
+-rw-r--r-- 1 root root 24 Nov  2 13:27 /tmp/prueba.txt
+put: /tmp/prueba.txt: Access failed: 553 Could not create file. (prueba.txt)
+ls: Fatal error: Certificate verification: The certificate is NOT trusted. The certificate issuer is unknown.  (2C:3B:F9:F2:D4:3C:CB:E0:F5:33:C0:3B:20:56:E8:C3:47:0E:1D:F6)
+drwxr-xr-x    2 1004     1007         4096 Nov 01 20:35 assets
+-rw-r--r--    1 1004     1007          735 Nov 01 20:35 index.html
+sftp> put /tmp/prueba.txt
+sftp> ls -l
+-rw-r--r--    ? despliegue despliegue       24 Nov  2 13:27 prueba.txt
+despliegue@172.20.0.3: Permission denied (publickey).
+< 220 (vsFTPd 3.0.5)
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
