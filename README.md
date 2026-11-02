@@ -18,7 +18,13 @@
   - [Paso 12 - Modos activo y pasivo](#paso-12---modos-activo-y-pasivo)
   - [Paso 13 - FTPS explícito](#paso-13---ftps-expl%C3%ADcito)
   - [Paso 14 - Claves y transferencia por SSH](#paso-14---claves-y-transferencia-por-ssh)
-
+- [Verificables](#verificables)
+  - [1. Servicios activos en dpl-lab](#1-servicios-activos-en-dpl-lab)
+  - [2. Configuración y usuarios](#2-configuración-y-usuarios)
+  - [3. Transferencias reales desde dpl-cliente (activo y pasivo)](#3-transferencias-reales-desde-dpl-cliente-activo-y-pasivo)
+  - [4. Permisos](#4-permisos)
+  - [5. Transferencia cifrada](#5-transferencia-cifrada)
+  - [6. Comprobación rápida con curl](#6-comprobación-rápida-con-curl)
 
 En este proyecto, se trabaja en dos contenedores, `dpl-lab` (servidor) y `dpl-cliente` (cliente) en la red `dpl-net`.
 
@@ -151,8 +157,8 @@ docker exec dpl-cliente ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new
 
 Salida esperada:
 ```bash
-despliegue@172.20.0.3: Permission denied (publickey).
-root@172.20.0.3: Permission denied (publickey).
+despliegue@IP_DPL_LAB: Permission denied (publickey).
+root@IP_DPL_LAB: Permission denied (publickey).
 ```
 
 ## Paso 9 - Subida del build de Vite con despliegue
@@ -169,7 +175,7 @@ lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB \
 Desglose de este comando:
 * `lftp`: Cliente de transferencia de archivos avanzado que soporta FTP, FTPS, SFTP y HTTP.
 * `-u despliegue,CAMBIAR_ESTO`: Especifica las credenciales de autenticación en formato usuario,contraseña.
-* `IP_DPL_LAB`: Es la dirección IP del servidor destino (por ejemplo, 172.20.0.3).
+* `IP_DPL_LAB`: Es la dirección IP del servidor destino (por ejemplo, IP_DPL_LAB).
 * `-e "..."`: Indica a lftp que ejecute la cadena de comandos que está entre comillas
 * `set ssl:verify-certificate no;`: Desactiva la verificación estricta del certificado SSL/TLS. 
 * `cd /srv/dpl/web;`: Cambia el directorio de trabajo en el servidor remoto a la ruta donde se alojan los archivos de la web (/srv/dpl/web).
@@ -229,4 +235,199 @@ Copia remota con SCP, creación de un script por lotes para SFTP y eecución no 
 scp /tmp/dist/index.html despliegue@IP_DPL_LAB:/tmp/
 printf 'ls -l\n' > /tmp/sftp-batch.txt
 sftp -b /tmp/sftp-batch.txt despliegue@IP_DPL_LAB
+```
+
+# Verificables
+
+## 1. Servicios activos en dpl-lab 
+
+* (sin systemd: proceso + puerto + versión)
+
+Comandos de comprobación:
+```bash
+docker exec dpl-lab pgrep -a vsftpd
+docker exec dpl-lab ss -lntp | grep ':21'
+docker exec dpl-lab pgrep -a sshd
+docker exec dpl-lab bash -c "dpkg -l vsftpd | tail -1"
+```
+
+Salida:
+```bash
+86 /usr/sbin/vsftpd /etc/vsftpd.conf
+LISTEN 0      32           0.0.0.0:21         0.0.0.0:*    users:(("vsftpd",pid=86,fd=3))
+46 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+ii  vsftpd         3.0.5-0ubuntu3.1 arm64        lightweight, efficient FTP server written for security
+```
+
+## 2. Configuración y usuarios
+
+Comandos de comprobación:
+```bash
+docker exec dpl-lab grep -E 'anonymous_enable|local_enable|write_enable|ssl_enable' /etc/vsftpd.conf
+docker exec dpl-lab grep -E '^PasswordAuthentication|^PermitRootLogin' /etc/ssh/sshd_config
+docker exec dpl-lab grep -E 'despliegue|lector' /etc/passwd
+docker exec dpl-lab groups despliegue lector
+docker exec dpl-lab ls -ld /srv/dpl/web
+```
+
+Salida:
+```bash
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+#anon_mkdir_write_enable=YES
+#ssl_enable=NO
+ssl_enable=YES
+PermitRootLogin no
+PasswordAuthentication no
+PermitRootLogin no
+PasswordAuthentication no
+despliegue:x:1004:1007::/home/despliegue:/bin/bash
+lector:x:1005:1005::/home/lector:/bin/bash
+despliegue : despliegue operaciones
+lector : lector operaciones
+drwxr-x--- 4 despliegue operaciones 4096 Nov  1 20:44 /srv/dpl/web
+```
+
+## 3. Transferencias reales desde dpl-cliente (activo y pasivo).
+
+Con FTPS forzado, lftp debe aceptar el certificado autofirmado:"set ssl:verify-certificate no". 
+Si tu servidor permite FTP en claro, la opción no molesta.
+
+Comando:
+```bash
+docker exec dpl-cliente bash -c "echo 'prueba de transferencia' > /tmp/prueba.txt"
+```
+Comando:
+```bash
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ssl:verify-certificate no; cd /srv/dpl/web; put /tmp/prueba.txt; ls; exit"
+```
+Salida:
+```bash
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 12:58 prueba.txt
+```
+Comando:
+```bash
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ftp:passive-mode off; set ssl:verify-certificate no; cd /srv/dpl/web; ls; exit"
+```
+Salida:
+```bash
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 12:58 prueba.txt
+```
+Comando:
+```bash
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ftp:passive-mode on; set ssl:verify-certificate no; cd /srv/dpl/web; ls; exit"
+```
+Salida:
+```bash
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 12:58 prueba.txt
+```
+
+## 4. Permisos
+
+`lector` descarga sí, escribe no; anónimo no
+
+* `lector` descarga sí:
+
+Comando:
+```bash
+docker exec dpl-cliente lftp -u lector,CAMBIAR_ESTO IP_DPL_LAB -e "set ssl:verify-certificate no; cd /srv/dpl/web; get prueba.txt; exit"
+```
+No devuelve ninguna salida, para comprobar la descarga del usuario `lector`:
+```bash
+docker exec dpl-cliente ls -l /tmp/prueba.txt
+```
+Salida:
+```bash
+-rw-r--r-- 1 root root 24 Nov  2 12:58 /tmp/prueba.txt
+```
+
+* `lector` escribe no:
+
+Comando:
+```bash
+docker exec dpl-cliente lftp -u lector,CAMBIAR_ESTO IP_DPL_LAB -e "set ssl:verify-certificate no; cd /srv/dpl/web; put /tmp/prueba.txt; exit"   # debe fallar
+```
+Salida:
+```bash
+put: /tmp/prueba.txt: Access failed: 553 Could not create file. (prueba.txt)
+```
+
+* anónimo no:
+
+Comando:
+```bash
+docker exec dpl-cliente lftp -u anonymous, IP_DPL_LAB -e "ls; exit"                                                                             # debe fallar
+```
+Salida:
+```bash
+ls: Fatal error: Certificate verification: The certificate is NOT trusted. The certificate issuer is unknown.  (2C:3B:F9:F2:D4:3C:CB:E0:F5:33:C0:3B:20:56:E8:C3:47:0E:1D:F6)
+```
+
+## 5. Transferencia cifrada
+
+* FTPS explícito y SFTP con clave
+
+Comando:
+```bash
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB \
+  -e "set ftp:ssl-force true; set ssl:verify-certificate no; cd /srv/dpl/web/dist; ls; exit"
+```
+
+Salida:
+```bash
+drwxr-xr-x    2 1004     1007         4096 Nov 01 20:35 assets
+-rw-r--r--    1 1004     1007          735 Nov 01 20:35 index.html
+```
+
+Comando:
+
+```bash
+docker exec dpl-cliente bash -c "printf 'put /tmp/prueba.txt\nls -l\n' > /tmp/sftp-batch.txt"
+docker exec dpl-cliente sftp -b /tmp/sftp-batch.txt despliegue@IP_DPL_LAB
+```
+
+Salida:
+```bash
+sftp> put /tmp/prueba.txt
+sftp> ls -l
+-rw-r--r--    ? despliegue despliegue       24 Nov  2 13:13 prueba.txt
+```
+
+Comando:
+```bash
+docker exec dpl-cliente ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password despliegue@IP_DPL_LAB true   # debe fallar
+```
+
+Salida:
+```bash
+despliegue@IP_DPL_LAB: Permission denied (publickey).
+```
+
+## 6. Comprobación rápida con curl 
+* (banner y FTPS explícito; con las directivas ssl_* el FTP en claro se rechaza, así que se usa --ssl-reqd)
+
+```bash
+docker exec dpl-cliente curl -sv --ssl-reqd --insecure -u despliegue:CAMBIAR_ESTO ftp://IP_DPL_LAB/ 2>&1 | grep 220
+```
+Salida:
+```bash
+< 220 (vsFTPd 3.0.5)
+```
+Comando:
+```bash
+docker exec dpl-cliente curl -s --ssl-reqd --insecure -u despliegue:CAMBIAR_ESTO ftp://IP_DPL_LAB/
+```
+Salida:
+```bash
+-rw-r--r--    1 1004     1007           24 Nov 02 13:13 prueba.txt
 ```
