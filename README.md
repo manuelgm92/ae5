@@ -2,8 +2,25 @@
 
 # Índice
 
+- [dpl-lab](#dpl-lab)
+  - [Paso 1 - Usuarios y grupo](#paso-1---usuarios-y-grupo)
+  - [Paso 2 - Directorio de despliegue](#paso-2---directorio-de-despliegue)
+  - [Paso 3 - Comprobación de usuarios y permisos](#paso-3---comprobación-de-usuarios-y-permisos)
+  - [Paso 4 - Configurar vsftpd](#paso-4---configurar-vsftpd)
+  - [Paso 5 - Transferencia cifrada con FTPS](#paso-5---transferencia-cifrada-con-ftps)
+  - [Paso 6 - Instalar y lanzar OpenSSH](#paso-6---instalar-y-lanzar-openssh)
+  - [Paso 7 - Endurecer el servicio](#paso-7---endurecer-el-servicio)
+- [dpl-cliente](#dpl-cliente)
+  - [Paso 8 - Comprobar endurecimiento](#paso-8---comprobar-endurecimiento)
+  - [Paso 9 - Subida del build de Vite con despliegue](#paso-9---subida-del-build-de-vite-con-despliegue)
+  - [Paso 10 - Descarga con lector y escritura con lector](#paso-10---descarga-con-lector-y-escritura-con-lector)
+  - [Paso 11 - Anónimo debe fallar](#paso-11---anónimo-debe-fallar)
+  - [Paso 12 - Modos activo y pasivo](#paso-12---modos-activo-y-pasivo)
+  - [Paso 13 - FTPS explícito](#paso-13---ftps-expl%C3%ADcito)
+  - [Paso 14 - Claves y transferencia por SSH](#paso-14---claves-y-transferencia-por-ssh)
 
-En este microproyecto, se trabaja en dos contenedores, `dpl-lab` (servidor) y `dpl-cliente` (cliente) en la red `dpl-net`.
+
+En este proyecto, se trabaja en dos contenedores, `dpl-lab` (servidor) y `dpl-cliente` (cliente) en la red `dpl-net`.
 
 
 # dpl-lab
@@ -138,7 +155,7 @@ despliegue@172.20.0.3: Permission denied (publickey).
 root@172.20.0.3: Permission denied (publickey).
 ```
 
-## Paso 9 - Subida del build de Vite con despliegue
+## Paso 9 - Subida del build de Vite con despliegue
 
 Desde el anfitrión, copia el directorio `dist`en `dpl-cliente:/tmp/dist`: `docker cp ~/dpl/ae4/frontend/dist dpl-cliente:/tmp/dist)`
 
@@ -184,7 +201,7 @@ lftp -u lector,CAMBIAR_ESTO IP_DPL_LAB -e "set ssl:verify-certificate no; set xf
 lftp -u anonymous, IP_DPL_LAB -e "ls; exit"
 ```
 
-# Paso 11 - Modos activo y pasivo
+# Paso 12 - Modos activo y pasivo
 
 Comprobar los modos activos y pasivos, debe responder devolviendo exactamente el mismo listado (`assets` e `index.html`):
 ```bash
@@ -192,13 +209,13 @@ lftp -e "set ftp:passive-mode off; set ssl:verify-certificate no; open -u despli
 lftp -e "set ftp:passive-mode on; set ssl:verify-certificate no; open -u despliegue,CAMBIAR_ESTO IP_DPL_LAB; cd /srv/dpl/web/dist; ls; exit"
 ```
 
-## Paso 12 - FPS explícito
+## Paso 13 - FTPS explícito
 
 ```bash
 lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ftp:ssl-force true; set ssl:verify-certificate no; cd /srv/dpl/web/dist; ls; exit"
 ```
 
-## Paso - 13 - Claves y transferencia por SSH
+## Paso 14 - Claves y transferencia por SSH
 
 Generación del par de claves SSH, copia de la cable pública al servidor y verificación del acceso por SSH.
 ```bash
