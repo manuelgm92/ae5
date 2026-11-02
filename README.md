@@ -32,6 +32,7 @@
   - [comandos.txt](#comandostxt)
   - [vsftpd.conf](#vsftpdconf)
   - [Diagrama Mermaid de la arquitectura](#diagrama-mermaid-de-la-arquitectura)
+- [Repositorio remoto](#repositorio-remoto)
 
 
 En este proyecto, se trabaja en dos contenedores, `dpl-lab` (servidor) y `dpl-cliente` (cliente) en la red `dpl-net`.
@@ -645,3 +646,7 @@ flowchart TD
         SSH_Client -->|SFTP / SCP con Clave Pública<br>Puerto 22| SSHD
     end
 ```
+
+# Repositorio remoto
+
+* https://github.com/manuelgm92/ae5
