@@ -25,6 +25,7 @@
   - [4. Permisos](#4-permisos)
   - [5. Transferencia cifrada](#5-transferencia-cifrada)
   - [6. Comprobación rápida con curl](#6-comprobación-rápida-con-curl)
+- [comprobaciones.txt](#comprobacionestxt)
 
 En este proyecto, se trabaja en dos contenedores, `dpl-lab` (servidor) y `dpl-cliente` (cliente) en la red `dpl-net`.
 
@@ -430,4 +431,93 @@ docker exec dpl-cliente curl -s --ssl-reqd --insecure -u despliegue:CAMBIAR_ESTO
 Salida:
 ```bash
 -rw-r--r--    1 1004     1007           24 Nov 02 13:13 prueba.txt
+```
+
+# comprobaciones.txt
+
+Se ejecutan los siguientes comandos y se copia la salida en `comprobaciones.txt`:
+
+```bash
+# 1. Servicios activos en dpl-lab (sin systemd: proceso + puerto + versión)
+docker exec dpl-lab pgrep -a vsftpd
+docker exec dpl-lab ss -lntp | grep ':21'
+docker exec dpl-lab pgrep -a sshd
+docker exec dpl-lab bash -c "dpkg -l vsftpd | tail -1"
+
+# 2. Configuración y usuarios
+docker exec dpl-lab grep -E 'anonymous_enable|local_enable|write_enable|ssl_enable' /etc/vsftpd.conf
+docker exec dpl-lab grep -E '^PasswordAuthentication|^PermitRootLogin' /etc/ssh/sshd_config
+docker exec dpl-lab grep -E 'despliegue|lector' /etc/passwd
+docker exec dpl-lab groups despliegue lector
+docker exec dpl-lab ls -ld /srv/dpl/web
+
+# 3. Transferencias reales desde dpl-cliente (activo y pasivo)
+docker exec dpl-cliente bash -c "echo 'prueba de transferencia' > /tmp/prueba.txt"
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ssl:verify-certificate no; cd /srv/dpl/web; put /tmp/prueba.txt; ls; exit"
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ftp:passive-mode off; set ssl:verify-certificate no; cd /srv/dpl/web; ls; exit"
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ftp:passive-mode on; set ssl:verify-certificate no; cd /srv/dpl/web; ls; exit"
+
+# 4. Permisos: lector descarga sí, escribe no; anónimo no
+docker exec dpl-cliente lftp -u lector,CAMBIAR_ESTO IP_DPL_LAB -e "set ssl:verify-certificate no; cd /srv/dpl/web; get prueba.txt; exit"
+docker exec dpl-cliente ls -l /tmp/prueba.txt
+docker exec dpl-cliente lftp -u lector,CAMBIAR_ESTO IP_DPL_LAB -e "set ssl:verify-certificate no; cd /srv/dpl/web; put /tmp/prueba.txt; exit"   # debe fallar
+docker exec dpl-cliente lftp -u anonymous, IP_DPL_LAB -e "ls; exit"                                                                             # debe fallar
+
+# 5. Transferencia cifrada: FTPS explícito y SFTP con clave
+docker exec dpl-cliente lftp -u despliegue,CAMBIAR_ESTO IP_DPL_LAB -e "set ftp:ssl-force true; set ssl:verify-certificate no; cd /srv/dpl/web/dist; ls; exit"
+docker exec dpl-cliente bash -c "printf 'put /tmp/prueba.txt\nls -l\n' > /tmp/sftp-batch.txt"
+docker exec dpl-cliente sftp -b /tmp/sftp-batch.txt despliegue@IP_DPL_LAB
+docker exec dpl-cliente ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password despliegue@IP_DPL_LAB true   # debe fallar
+
+# 6. Comprobación rápida con curl (banner y FTPS explícito)
+docker exec dpl-cliente curl -sv --ssl-reqd --insecure -u despliegue:CAMBIAR_ESTO ftp://IP_DPL_LAB/ 2>&1 | grep 220
+docker exec dpl-cliente curl -s --ssl-reqd --insecure -u despliegue:CAMBIAR_ESTO ftp://IP_DPL_LAB/
+```
+
+`cat comprobaciones.txt`:
+
+```bash
+86 /usr/sbin/vsftpd /etc/vsftpd.conf
+LISTEN 0      32           0.0.0.0:21         0.0.0.0:*    users:(("vsftpd",pid=86,fd=3))
+46 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+ii  vsftpd         3.0.5-0ubuntu3.1 arm64        lightweight, efficient FTP server written for security
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+#anon_mkdir_write_enable=YES
+#ssl_enable=NO
+ssl_enable=YES
+PermitRootLogin no
+PasswordAuthentication no
+PermitRootLogin no
+PasswordAuthentication no
+despliegue:x:1004:1007::/home/despliegue:/bin/bash
+lector:x:1005:1005::/home/lector:/bin/bash
+despliegue : despliegue operaciones
+lector : lector operaciones
+drwxr-x--- 4 despliegue operaciones 4096 Nov  1 20:44 /srv/dpl/web
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
+drwxr-xr-x    2 1004     1006         4096 Nov 01 20:31 assets
+drwxr-xr-x    3 1004     1007         4096 Nov 01 20:35 dist
+-rw-r-----    1 1004     1006          735 Nov 01 20:31 index.html
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
+get: /prueba.txt: file already exists and xfer:clobber is unset
+-rw-r--r-- 1 root root 24 Nov  2 13:27 /tmp/prueba.txt
+put: /tmp/prueba.txt: Access failed: 553 Could not create file. (prueba.txt)
+ls: Fatal error: Certificate verification: The certificate is NOT trusted. The certificate issuer is unknown.  (2C:3B:F9:F2:D4:3C:CB:E0:F5:33:C0:3B:20:56:E8:C3:47:0E:1D:F6)
+drwxr-xr-x    2 1004     1007         4096 Nov 01 20:35 assets
+-rw-r--r--    1 1004     1007          735 Nov 01 20:35 index.html
+sftp> put /tmp/prueba.txt
+sftp> ls -l
+-rw-r--r--    ? despliegue despliegue       24 Nov  2 13:27 prueba.txt
+despliegue@IP_DPL_LAB: Permission denied (publickey).
+< 220 (vsFTPd 3.0.5)
+-rw-r--r--    1 1004     1007           24 Nov 02 13:27 prueba.txt
 ```
